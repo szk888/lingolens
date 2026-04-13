@@ -1,1 +1,721 @@
 # lingolens
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+    <title>LingoLens · 单词光域</title>
+    <!-- 苹果风格字体 & 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- OCR 引擎 Tesseract -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: #f5f5f7;
+            font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
+            color: #1c1c1e;
+            padding: 1.2rem 1rem 2.5rem;
+            line-height: 1.4;
+        }
+
+        .app-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* 头部区域 */
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            margin-bottom: 1.8rem;
+            padding-bottom: 0.6rem;
+            border-bottom: 0.5px solid rgba(60,60,67,0.1);
+        }
+        .hero h1 {
+            font-size: 2rem;
+            font-weight: 620;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #1c1c1e, #3a3a3c);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stats {
+            font-size: 0.9rem;
+            background: rgba(120,120,128,0.12);
+            padding: 0.3rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 500;
+            color: #007aff;
+        }
+
+        /* 双卡片输入区 */
+        .input-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.2rem;
+            margin-bottom: 2.2rem;
+        }
+        .card {
+            flex: 1;
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: blur(20px);
+            border-radius: 32px;
+            padding: 1.2rem 1.2rem 1.4rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.04), 0 0 0 0.5px rgba(0,0,0,0.02);
+            border: 0.5px solid rgba(255,255,255,0.7);
+            transition: all 0.2s ease;
+        }
+        .card h3 {
+            font-size: 1.2rem;
+            font-weight: 590;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .camera-btn, .text-submit {
+            background: #007aff;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 2rem;
+            font-weight: 500;
+            color: white;
+            font-size: 1rem;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-top: 12px;
+        }
+        .camera-btn:active, .text-submit:active { transform: scale(0.97); opacity: 0.85; }
+        .text-input-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        #textWordInput {
+            flex: 1;
+            padding: 0.8rem 1rem;
+            border-radius: 2rem;
+            border: 0.5px solid rgba(0,0,0,0.1);
+            background: white;
+            font-size: 1rem;
+            outline: none;
+            font-family: inherit;
+        }
+        #textWordInput:focus {
+            border-color: #007aff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
+        }
+        .suggestions {
+            margin-top: 12px;
+            max-height: 160px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.9);
+            border-radius: 24px;
+            padding: 4px;
+        }
+        .sugg-item {
+            padding: 10px 14px;
+            border-radius: 28px;
+            background: white;
+            margin: 4px 0;
+            cursor: pointer;
+            transition: 0.1s;
+            font-weight: 460;
+        }
+        .sugg-item:active { background: #e5e5ea; transform: scale(0.99); }
+
+        /* 单词库区域 */
+        .library-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 1rem 0 1rem;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .search-bar {
+            flex: 2;
+            background: rgba(255,255,255,0.8);
+            border-radius: 30px;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+        .search-bar i { color: #8e8e93; }
+        .search-bar input {
+            background: transparent;
+            border: none;
+            font-size: 1rem;
+            width: 100%;
+            outline: none;
+        }
+        .multi-btn {
+            background: rgba(0,122,255,0.12);
+            border: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 30px;
+            font-weight: 500;
+            color: #007aff;
+            cursor: pointer;
+        }
+        .date-group {
+            margin-bottom: 1.8rem;
+            border-radius: 28px;
+            background: rgba(255,255,255,0.5);
+            backdrop-filter: blur(4px);
+            overflow: hidden;
+        }
+        .group-title {
+            padding: 1rem 1.2rem;
+            font-size: 1.3rem;
+            font-weight: 590;
+            background: rgba(255,255,255,0.7);
+            border-bottom: 0.5px solid rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+        }
+        .word-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 12px;
+        }
+        .word-item {
+            background: white;
+            border-radius: 24px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.1s;
+            cursor: pointer;
+            user-select: none;
+            touch-action: pan-y pinch-zoom;
+        }
+        .word-item.selected-mode {
+            background: #e3f2ff;
+        }
+        .word-info {
+            flex: 1;
+        }
+        .word-main {
+            font-size: 1.2rem;
+            font-weight: 590;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .word-main span { font-weight: 480; font-size: 0.85rem; color: #8e8e93; }
+        .meaning {
+            font-size: 0.85rem;
+            color: #3a3a3c;
+            margin-top: 4px;
+        }
+        .audio-btns {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .audio-icon {
+            background: #f2f2f5;
+            border-radius: 30px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .audio-icon:active { background: #e5e5ea; transform: scale(0.96);}
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            border-radius: 30px;
+            border: 2px solid #c6c6c8;
+            margin-right: 12px;
+            background: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .checkbox.checked {
+            background: #007aff;
+            border-color: #007aff;
+        }
+        .checkbox.checked::after {
+            content: "✓";
+            color: white;
+            font-size: 14px;
+        }
+        .multi-footer {
+            position: sticky;
+            bottom: 16px;
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(30px);
+            border-radius: 40px;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        .hidden { display: none; }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            z-index: 200;
+            pointer-events: none;
+        }
+        .highlight {
+            animation: flash 0.6s ease-in-out;
+            background-color: #ffd60a20;
+            border-radius: 24px;
+        }
+        @keyframes flash {
+            0% { background-color: #ffd60a80; }
+            100% { background-color: transparent; }
+        }
+        @media (max-width: 680px) {
+            .word-main { font-size: 1rem; }
+            .audio-icon { padding: 4px 8px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="hero">
+        <h1>📖 LingoLens</h1>
+        <div class="stats" id="wordCountBadge">0 词</div>
+    </div>
+
+    <!-- 双输入卡片 -->
+    <div class="input-row">
+        <!-- 拍照输入 -->
+        <div class="card">
+            <h3><i class="fas fa-camera"></i> 拍照取词</h3>
+            <input type="file" id="imageInput" accept="image/*" capture="environment" style="display:none">
+            <button class="camera-btn" id="triggerCamera"><i class="fas fa-camera"></i> 拍摄 / 上传图片</button>
+            <div id="ocrStatus" style="font-size:0.8rem; margin-top:8px; color:#007aff;"></div>
+        </div>
+        <!-- 文字输入 -->
+        <div class="card">
+            <h3><i class="fas fa-keyboard"></i> 文字输入</h3>
+            <div class="text-input-group">
+                <input type="text" id="textWordInput" placeholder="输入英文单词..." autocomplete="off">
+                <button class="text-submit" id="manualAddBtn"><i class="fas fa-plus"></i> 添加</button>
+            </div>
+            <div class="suggestions" id="suggestionsList"></div>
+        </div>
+    </div>
+
+    <!-- 单词库工具栏 -->
+    <div class="library-header">
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="搜索单词或释义...">
+        </div>
+        <button id="enterMultiSelect" class="multi-btn"><i class="fas fa-check-circle"></i> 选择</button>
+    </div>
+
+    <!-- 单词库渲染区 -->
+    <div id="wordsLibrary"></div>
+
+    <!-- 多选底部栏 -->
+    <div id="multiFooter" class="multi-footer hidden">
+        <button id="cancelMultiBtn" class="multi-btn" style="background:#e5e5ea; color:#1c1c1e;">取消</button>
+        <button id="deleteSelectedBtn" class="multi-btn" style="background:#ff3b30; color:white;">删除所选</button>
+    </div>
+</div>
+
+<script>
+    // ---------- 全局数据 & 存储 ----------
+    let wordStore = [];       // 存储对象 { id, word, date, phonetic, meaning, usAudio, ukAudio }
+    let multiSelectMode = false;
+    let selectedWordIds = new Set();
+    let currentFilter = "";
+
+    // 辅助函数: 日期格式化 (YYYY-MM-DD)
+    function getTodayStr() { return new Date().toISOString().slice(0,10); }
+    
+    // 加载本地数据
+    function loadData() {
+        const stored = localStorage.getItem("lingolens_words");
+        if(stored) wordStore = JSON.parse(stored);
+        else wordStore = [];
+        renderLibrary();
+        updateStats();
+    }
+
+    function saveData() {
+        localStorage.setItem("lingolens_words", JSON.stringify(wordStore));
+        updateStats();
+    }
+
+    function updateStats() {
+        document.getElementById("wordCountBadge").innerText = wordStore.length + " 词";
+    }
+
+    // 词典API + 本地缓存 (查询单词元数据)
+    const dictCache = new Map();
+    async function fetchWordData(word) {
+        const lower = word.toLowerCase();
+        if(dictCache.has(lower)) return dictCache.get(lower);
+        try {
+            const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(lower)}`);
+            if(!resp.ok) throw new Error("not found");
+            const data = await resp.json();
+            const entry = data[0];
+            const phonetic = entry.phonetic || (entry.phonetics?.[0]?.text) || "";
+            const meaningObj = entry.meanings[0];
+            const definition = meaningObj?.definitions[0]?.definition || "暂无释义";
+            const usAudio = entry.phonetics?.find(p => p.audio && p.audio.includes("us"))?.audio || 
+                           entry.phonetics?.find(p => p.audio)?.audio || "";
+            const ukAudio = entry.phonetics?.find(p => p.audio && p.audio.includes("uk"))?.audio || "";
+            const result = {
+                word: lower,
+                phonetic,
+                meaning: definition,
+                usAudio,
+                ukAudio
+            };
+            dictCache.set(lower, result);
+            return result;
+        } catch(e) {
+            // 备用本地简易释义
+            const fallback = { word: lower, phonetic: "", meaning: "✨ 新词, 可自行查阅", usAudio: "", ukAudio: "" };
+            dictCache.set(lower, fallback);
+            return fallback;
+        }
+    }
+
+    // 添加单词核心 (去重 + 跳转高亮)
+    async function addWord(wordRaw) {
+        let word = wordRaw.trim().toLowerCase();
+        if(word === "") { showToast("请输入单词"); return false; }
+        // 去重检查
+        const existing = wordStore.find(w => w.word === word);
+        if(existing) {
+            showToast(`「${word}」已在单词库中`);
+            scrollToWordAndHighlight(existing.id);
+            return false;
+        }
+        // 获取词典数据
+        const dictInfo = await fetchWordData(word);
+        const newEntry = {
+            id: Date.now() + "_" + Math.random(),
+            word: dictInfo.word,
+            date: getTodayStr(),
+            phonetic: dictInfo.phonetic,
+            meaning: dictInfo.meaning,
+            usAudio: dictInfo.usAudio,
+            ukAudio: dictInfo.ukAudio
+        };
+        wordStore.push(newEntry);
+        saveData();
+        renderLibrary();
+        // 滚动到新添加的词
+        setTimeout(() => scrollToWordAndHighlight(newEntry.id), 100);
+        showToast(`✅ 已添加 ${word}`);
+        return true;
+    }
+
+    function scrollToWordAndHighlight(id) {
+        const el = document.querySelector(`.word-item[data-id='${id}']`);
+        if(el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('highlight');
+            setTimeout(() => el.classList.remove('highlight'), 800);
+        }
+    }
+
+    // 删除单词 (单个)
+    function deleteWordById(id) {
+        wordStore = wordStore.filter(w => w.id != id);
+        saveData();
+        if(multiSelectMode) exitMultiSelect();
+        renderLibrary();
+        showToast("已删除单词");
+    }
+
+    // 渲染单词库 (分组 + 过滤)
+    function renderLibrary() {
+        const container = document.getElementById("wordsLibrary");
+        let filtered = wordStore.filter(w => 
+            w.word.includes(currentFilter.toLowerCase()) || 
+            w.meaning.toLowerCase().includes(currentFilter.toLowerCase())
+        );
+        // 按日期分组倒序
+        const groups = new Map();
+        filtered.forEach(w => { if(!groups.has(w.date)) groups.set(w.date, []); groups.get(w.date).push(w); });
+        const sortedDates = Array.from(groups.keys()).sort((a,b)=>b.localeCompare(a));
+        if(sortedDates.length === 0) {
+            container.innerHTML = `<div style="text-align:center; padding: 3rem; color:#8e8e93;">✨ 暂无单词，拍照或输入添加吧</div>`;
+            return;
+        }
+        let html = "";
+        for(let date of sortedDates) {
+            const words = groups.get(date);
+            html += `<div class="date-group"><div class="group-title"><span>📅 ${date}</span><span>${words.length}词</span></div><div class="word-list">`;
+            words.forEach(w => {
+                const isSelected = multiSelectMode && selectedWordIds.has(w.id);
+                const checkedClass = isSelected ? "checked" : "";
+                html += `
+                    <div class="word-item" data-id="${w.id}" data-word="${w.word}">
+                        ${multiSelectMode ? `<div class="checkbox ${checkedClass}" data-checkbox-id="${w.id}"></div>` : ''}
+                        <div class="word-info">
+                            <div class="word-main">
+                                <strong>${escapeHtml(w.word)}</strong> <span>${w.phonetic || ''}</span>
+                            </div>
+                            <div class="meaning">${escapeHtml(w.meaning)}</div>
+                        </div>
+                        <div class="audio-btns">
+                            <div class="audio-icon" data-audio="us" data-word="${w.word}" data-url="${w.usAudio}">🇺🇸 美</div>
+                            <div class="audio-icon" data-audio="uk" data-word="${w.word}" data-url="${w.ukAudio}">🇬🇧 英</div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div></div>`;
+        }
+        container.innerHTML = html;
+
+        // 绑定发音事件 (事件委托)
+        container.querySelectorAll(".audio-icon").forEach(btn => {
+            btn.removeEventListener("click", audioClickHandler);
+            btn.addEventListener("click", audioClickHandler);
+        });
+        // 长按删除 (单个单词)
+        if(!multiSelectMode) {
+            const wordItems = container.querySelectorAll(".word-item");
+            wordItems.forEach(item => {
+                item.removeEventListener("contextmenu", longPressDelete); 
+                item.removeEventListener("touchstart", touchStartHandler);
+                item.removeEventListener("touchend", touchEndHandler);
+                item.removeEventListener("touchmove", touchMoveHandler);
+                // 增加长按防误触 (原生contextmenu+自定义长按)
+                item.addEventListener("contextmenu", (e) => { e.preventDefault(); handleLongPressDelete(item.dataset.id); });
+                let pressTimer = null;
+                const start = (e) => { if(e.touches) pressTimer = setTimeout(() => { handleLongPressDelete(item.dataset.id); }, 500); };
+                const cancel = () => { if(pressTimer) clearTimeout(pressTimer); };
+                item.addEventListener("touchstart", start, {passive:false});
+                item.addEventListener("touchend", cancel);
+                item.addEventListener("touchmove", cancel);
+                item._start = start; item._cancel = cancel;
+            });
+        }
+
+        // 多选模式下 绑定checkbox点击 & 滑动批量选择
+        if(multiSelectMode) {
+            attachMultiSelectEvents();
+        }
+    }
+
+    function audioClickHandler(e) {
+        e.stopPropagation();
+        const btn = e.currentTarget;
+        const word = btn.dataset.word;
+        const type = btn.dataset.audio;
+        const url = btn.dataset.url;
+        if(url && url.trim() !== "") {
+            const audio = new Audio(url);
+            audio.play().catch(() => fallbackSpeak(word, type));
+        } else {
+            fallbackSpeak(word, type);
+        }
+    }
+
+    function fallbackSpeak(word, type) {
+        if(!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(word);
+        utterance.lang = type === 'us' ? 'en-US' : 'en-GB';
+        utterance.rate = 0.85;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function handleLongPressDelete(id) {
+        if(multiSelectMode) return;
+        const confirmDel = confirm("确定要删除这个单词吗？");
+        if(confirmDel) deleteWordById(id);
+    }
+
+    // 多选逻辑 (滑动选择)
+    let lastToggledElement = null;
+    function attachMultiSelectEvents() {
+        const container = document.getElementById("wordsLibrary");
+        const wordItems = container.querySelectorAll(".word-item");
+        // 为每个checkbox绑定点击
+        wordItems.forEach(item => {
+            const chk = item.querySelector(".checkbox");
+            if(chk) {
+                chk.onclick = (e) => {
+                    e.stopPropagation();
+                    const wid = item.dataset.id;
+                    toggleSelectWord(wid);
+                    renderLibrary(); // 重新渲染保持ui
+                };
+            }
+        });
+        // 滑动多选: 监听touchmove on container
+        let isSliding = false;
+        container.addEventListener("touchstart", (e) => {
+            if(e.touches.length === 1 && !e.target.closest(".audio-icon")) {
+                isSliding = true;
+                const targetItem = e.target.closest(".word-item");
+                if(targetItem && !targetItem.querySelector(".checkbox")?.contains(e.target)) {
+                    // 触发滑动模式前不立刻选中
+                }
+            }
+        });
+        container.addEventListener("touchmove", (e) => {
+            if(!multiSelectMode || !isSliding) return;
+            e.preventDefault();
+            const elem = document.elementsFromPoint(e.touches[0].clientX, e.touches[0].clientY)[0];
+            const item = elem.closest(".word-item");
+            if(item && item !== lastToggledElement) {
+                lastToggledElement = item;
+                const wid = item.dataset.id;
+                if(!selectedWordIds.has(wid)) {
+                    toggleSelectWord(wid);
+                    renderLibrary();
+                }
+            }
+        });
+        container.addEventListener("touchend", () => { isSliding = false; lastToggledElement = null; });
+    }
+
+    function toggleSelectWord(id) {
+        if(selectedWordIds.has(id)) selectedWordIds.delete(id);
+        else selectedWordIds.add(id);
+    }
+
+    function exitMultiSelect() {
+        multiSelectMode = false;
+        selectedWordIds.clear();
+        document.getElementById("multiFooter").classList.add("hidden");
+        document.getElementById("enterMultiSelect").innerHTML = '<i class="fas fa-check-circle"></i> 选择';
+        renderLibrary();
+    }
+    function enterMultiSelect() {
+        multiSelectMode = true;
+        selectedWordIds.clear();
+        document.getElementById("multiFooter").classList.remove("hidden");
+        document.getElementById("enterMultiSelect").innerHTML = '<i class="fas fa-times"></i> 取消选择';
+        renderLibrary();
+    }
+
+    // 删除所选
+    function deleteSelected() {
+        if(selectedWordIds.size === 0) { showToast("未选择任何单词"); return; }
+        if(confirm(`确认删除 ${selectedWordIds.size} 个单词吗？`)) {
+            wordStore = wordStore.filter(w => !selectedWordIds.has(w.id));
+            saveData();
+            exitMultiSelect();
+            renderLibrary();
+            showToast("已删除所选单词");
+        }
+    }
+
+    // 工具函数
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    function showToast(msg) {
+        let t = document.querySelector(".toast");
+        if(t) t.remove();
+        let div = document.createElement("div");
+        div.className = "toast"; div.innerText = msg;
+        document.body.appendChild(div);
+        setTimeout(() => div.remove(), 2000);
+    }
+
+    // ---------- OCR 拍照识别 ----------
+    const imageInput = document.getElementById("imageInput");
+    document.getElementById("triggerCamera").onclick = () => imageInput.click();
+    imageInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const statusDiv = document.getElementById("ocrStatus");
+        statusDiv.innerHTML = "<i class='fas fa-spinner fa-pulse'></i> 识别中...";
+        try {
+            const { data: { text } } = await Tesseract.recognize(file, 'eng', { logger: m => console.log(m) });
+            const words = text.match(/[a-zA-Z]+(?:['’][a-zA-Z]+)?/g);
+            let candidate = words && words.length ? words[0] : null;
+            if(candidate) {
+                statusDiv.innerHTML = `✅ 识别到: ${candidate}  <i class="fas fa-arrow-right"></i> 添加中...`;
+                await addWord(candidate);
+                statusDiv.innerHTML = "";
+            } else {
+                statusDiv.innerHTML = "⚠️ 未识别出有效单词，请重试";
+                setTimeout(()=> statusDiv.innerHTML = "", 2000);
+            }
+        } catch(err) { statusDiv.innerHTML = "识别失败"; console.error(err); }
+        imageInput.value = "";
+    });
+
+    // ---------- 文字输入 待选项 ----------
+    const textInput = document.getElementById("textWordInput");
+    const suggContainer = document.getElementById("suggestionsList");
+    let suggestionWords = [];
+    // 动态从已有词库 + 常见前缀生成 (简易)
+    const commonWords = ["apple","banana","car","house","beautiful","run","happy","dictionary","english","learn","language","phone","computer","music","reading"];
+    textInput.addEventListener("input", async (e) => {
+        const val = e.target.value.trim().toLowerCase();
+        if(val.length === 0) { suggContainer.innerHTML = ""; return; }
+        // 合并本地词库和常见词
+        let localWordsSet = new Set(wordStore.map(w => w.word));
+        commonWords.forEach(w => localWordsSet.add(w));
+        const matches = Array.from(localWordsSet).filter(w => w.startsWith(val)).slice(0, 8);
+        if(matches.length === 0) { suggContainer.innerHTML = `<div class="empty-suggest">未找到匹配，可直接添加</div>`; return; }
+        suggContainer.innerHTML = matches.map(w => `<div class="sugg-item" data-word="${w}">${w}</div>`).join("");
+        document.querySelectorAll(".sugg-item").forEach(el => {
+            el.onclick = () => { addWord(el.dataset.word); textInput.value = ""; suggContainer.innerHTML = ""; };
+        });
+    });
+
+    document.getElementById("manualAddBtn").onclick = async () => {
+        const word = textInput.value.trim();
+        if(word) { await addWord(word); textInput.value = ""; suggContainer.innerHTML = ""; }
+        else showToast("请输入单词");
+    };
+
+    // 搜索过滤
+    document.getElementById("searchInput").addEventListener("input", (e) => { currentFilter = e.target.value; renderLibrary(); });
+    // 多选按钮逻辑
+    const multiBtn = document.getElementById("enterMultiSelect");
+    multiBtn.onclick = () => {
+        if(multiSelectMode) exitMultiSelect();
+        else enterMultiSelect();
+    };
+    document.getElementById("cancelMultiBtn").onclick = () => exitMultiSelect();
+    document.getElementById("deleteSelectedBtn").onclick = () => deleteSelected();
+
+    // 初始化
+    loadData();
+    // 模拟轻微触感 (iOS不支持vibrate但保留)
+    if(navigator.vibrate) { /* 可选 */ }
+</script>
+</body>
+</html>
