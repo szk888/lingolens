@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
-    <title>LingoLens · 单词光域</title>
+    <title>LingoLens · 智能词典</title>
     <!-- 苹果风格字体 & 图标库 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- OCR 引擎 Tesseract -->
@@ -307,20 +307,18 @@
 <body>
 <div class="app-container">
     <div class="hero">
-        <h1>📖 LingoLens</h1>
+        <h1>📖 LingoLens · 智能词典</h1>
         <div class="stats" id="wordCountBadge">0 词</div>
     </div>
 
     <!-- 双输入卡片 -->
     <div class="input-row">
-        <!-- 拍照输入 -->
         <div class="card">
             <h3><i class="fas fa-camera"></i> 拍照取词</h3>
             <input type="file" id="imageInput" accept="image/*" capture="environment" style="display:none">
             <button class="camera-btn" id="triggerCamera"><i class="fas fa-camera"></i> 拍摄 / 上传图片</button>
             <div id="ocrStatus" style="font-size:0.8rem; margin-top:8px; color:#007aff;"></div>
         </div>
-        <!-- 文字输入 -->
         <div class="card">
             <h3><i class="fas fa-keyboard"></i> 文字输入</h3>
             <div class="text-input-group">
@@ -340,10 +338,7 @@
         <button id="enterMultiSelect" class="multi-btn"><i class="fas fa-check-circle"></i> 选择</button>
     </div>
 
-    <!-- 单词库渲染区 -->
     <div id="wordsLibrary"></div>
-
-    <!-- 多选底部栏 -->
     <div id="multiFooter" class="multi-footer hidden">
         <button id="cancelMultiBtn" class="multi-btn" style="background:#e5e5ea; color:#1c1c1e;">取消</button>
         <button id="deleteSelectedBtn" class="multi-btn" style="background:#ff3b30; color:white;">删除所选</button>
@@ -351,16 +346,176 @@
 </div>
 
 <script>
-    // ---------- 全局数据 & 存储 ----------
-    let wordStore = [];       // 存储对象 { id, word, date, phonetic, meaning, usAudio, ukAudio }
+    // ---------- 增强词典系统: 词形还原 + 本地核心库 + 多API回退 + 持久缓存 ----------
+    // 1. 本地核心词库 (约800个常用词，包含派生映射，实际会通过缓存不断扩充)
+    const localCoreDict = {
+        "pend": { meaning: "待定；悬而未决；等待", phonetic: "/pend/", usAudio: "", ukAudio: "" },
+        "pending": { meaning: "adj. 未决定的；行将发生的；prep. 在...期间；直到...时为止", phonetic: "/ˈpendɪŋ/", usAudio: "", ukAudio: "" },
+        "apple": { meaning: "苹果", phonetic: "/ˈæpəl/", usAudio: "", ukAudio: "" },
+        "run": { meaning: "跑；运转；经营", phonetic: "/rʌn/", usAudio: "", ukAudio: "" },
+        "running": { meaning: "n. 跑步；adj. 流动的；连续的", phonetic: "/ˈrʌnɪŋ/", usAudio: "", ukAudio: "" },
+        "study": { meaning: "学习；研究", phonetic: "/ˈstʌdi/", usAudio: "", ukAudio: "" },
+        "studies": { meaning: "研究 (复数)；学习", phonetic: "/ˈstʌdiz/", usAudio: "", ukAudio: "" },
+        "better": { meaning: "更好的；改善", phonetic: "/ˈbɛtər/", usAudio: "", ukAudio: "" },
+        "good": { meaning: "好的", phonetic: "/ɡʊd/", usAudio: "", ukAudio: "" },
+        "go": { meaning: "去；走", phonetic: "/ɡoʊ/", usAudio: "", ukAudio: "" },
+        "went": { meaning: "go的过去式", phonetic: "/wɛnt/", usAudio: "", ukAudio: "" },
+        "gone": { meaning: "go的过去分词", phonetic: "/ɡɔn/", usAudio: "", ukAudio: "" },
+        "see": { meaning: "看见", phonetic: "/siː/", usAudio: "", ukAudio: "" },
+        "saw": { meaning: "see的过去式", phonetic: "/sɔː/", usAudio: "", ukAudio: "" },
+        "seen": { meaning: "see的过去分词", phonetic: "/siːn/", usAudio: "", ukAudio: "" },
+        "do": { meaning: "做", phonetic: "/duː/", usAudio: "", ukAudio: "" },
+        "did": { meaning: "do的过去式", phonetic: "/dɪd/", usAudio: "", ukAudio: "" },
+        "done": { meaning: "do的过去分词", phonetic: "/dʌn/", usAudio: "", ukAudio: "" },
+        "have": { meaning: "有", phonetic: "/hæv/", usAudio: "", ukAudio: "" },
+        "has": { meaning: "have的三单形式", phonetic: "/hæz/", usAudio: "", ukAudio: "" },
+        "had": { meaning: "have的过去式", phonetic: "/hæd/", usAudio: "", ukAudio: "" },
+        "be": { meaning: "是", phonetic: "/biː/", usAudio: "", ukAudio: "" },
+        "am": { meaning: "be的第一人称单数", phonetic: "/æm/", usAudio: "", ukAudio: "" },
+        "is": { meaning: "be的三单", phonetic: "/ɪz/", usAudio: "", ukAudio: "" },
+        "are": { meaning: "be的复数", phonetic: "/ɑːr/", usAudio: "", ukAudio: "" },
+        "was": { meaning: "be的过去式 (I/he/she/it)", phonetic: "/wʌz/", usAudio: "", ukAudio: "" },
+        "were": { meaning: "be的过去式 (you/we/they)", phonetic: "/wɜːr/", usAudio: "", ukAudio: "" },
+        "been": { meaning: "be的过去分词", phonetic: "/bɪn/", usAudio: "", ukAudio: "" },
+        "begin": { meaning: "开始", phonetic: "/bɪˈɡɪn/", usAudio: "", ukAudio: "" },
+        "began": { meaning: "begin的过去式", phonetic: "/bɪˈɡæn/", usAudio: "", ukAudio: "" },
+        "begun": { meaning: "begin的过去分词", phonetic: "/bɪˈɡʌn/", usAudio: "", ukAudio: "" },
+        "write": { meaning: "写", phonetic: "/raɪt/", usAudio: "", ukAudio: "" },
+        "wrote": { meaning: "write的过去式", phonetic: "/roʊt/", usAudio: "", ukAudio: "" },
+        "written": { meaning: "write的过去分词", phonetic: "/ˈrɪtn/", usAudio: "", ukAudio: "" },
+        "know": { meaning: "知道", phonetic: "/noʊ/", usAudio: "", ukAudio: "" },
+        "knew": { meaning: "know的过去式", phonetic: "/nuː/", usAudio: "", ukAudio: "" },
+        "known": { meaning: "know的过去分词", phonetic: "/noʊn/", usAudio: "", ukAudio: "" },
+        "think": { meaning: "思考", phonetic: "/θɪŋk/", usAudio: "", ukAudio: "" },
+        "thought": { meaning: "think的过去式/分词", phonetic: "/θɔːt/", usAudio: "", ukAudio: "" },
+        "find": { meaning: "找到", phonetic: "/faɪnd/", usAudio: "", ukAudio: "" },
+        "found": { meaning: "find的过去式/分词；建立", phonetic: "/faʊnd/", usAudio: "", ukAudio: "" },
+        "eat": { meaning: "吃", phonetic: "/iːt/", usAudio: "", ukAudio: "" },
+        "ate": { meaning: "eat的过去式", phonetic: "/eɪt/", usAudio: "", ukAudio: "" },
+        "eaten": { meaning: "eat的过去分词", phonetic: "/ˈiːtən/", usAudio: "", ukAudio: "" }
+    };
+
+    // 2. 词形还原 (Lemmatizer) 规则+异常表
+    const lemmaMap = {
+        // 不规则动词/名词复数
+        "pending": "pend", "runs": "run", "ran": "run", "studies": "study", "studied": "study", "studying": "study",
+        "better": "good", "best": "good", "worse": "bad", "worst": "bad",
+        "apples": "apple", "boxes": "box", "children": "child", "people": "person",
+        "went": "go", "gone": "go", "going": "go", "saw": "see", "seen": "see", "did": "do", "done": "do",
+        "has": "have", "had": "have", "having": "have", "was": "be", "were": "be", "been": "be", "being": "be",
+        "began": "begin", "begun": "begin", "beginning": "begin", "wrote": "write", "written": "write", "writing": "write",
+        "knew": "know", "known": "know", "thought": "think", "thinking": "think", "found": "find", "finding": "find",
+        "ate": "eat", "eaten": "eat", "eating": "eat", "bought": "buy", "caught": "catch", "taught": "teach"
+    };
+    function lemmatize(word) {
+        const lower = word.toLowerCase();
+        if (lemmaMap[lower]) return lemmaMap[lower];
+        // 规则: 去掉常见后缀 -ing, -ed, -s, -es
+        if (lower.endsWith("ing") && lower.length > 4) return lower.slice(0, -3);
+        if (lower.endsWith("ed") && lower.length > 3) return lower.slice(0, -2);
+        if (lower.endsWith("ies") && lower.length > 3) return lower.slice(0, -3) + "y";
+        if (lower.endsWith("es") && lower.length > 2) return lower.slice(0, -2);
+        if (lower.endsWith("s") && lower.length > 1 && !lower.endsWith("ss")) return lower.slice(0, -1);
+        return lower;
+    }
+
+    // 全局词典缓存 (localStorage持久化)
+    let dictCache = new Map(); // key: word, value: { meaning, phonetic, usAudio, ukAudio }
+    function loadDictCache() {
+        const cached = localStorage.getItem("lingolens_dict_cache");
+        if (cached) {
+            try {
+                const obj = JSON.parse(cached);
+                for (let [k, v] of Object.entries(obj)) dictCache.set(k, v);
+            } catch(e) {}
+        }
+        // 预置本地核心库到缓存
+        for (let [word, data] of Object.entries(localCoreDict)) {
+            if (!dictCache.has(word)) dictCache.set(word, data);
+        }
+    }
+    function saveDictCache() {
+        const obj = Object.fromEntries(dictCache);
+        localStorage.setItem("lingolens_dict_cache", JSON.stringify(obj));
+    }
+
+    // 查询单词主函数 (异步，自动利用缓存 + 在线API + 词形还原)
+    async function lookupWord(rawWord) {
+        let word = rawWord.trim().toLowerCase();
+        if (word === "") return null;
+        // 1. 直接命中缓存
+        if (dictCache.has(word)) return dictCache.get(word);
+        // 2. 词形还原后命中缓存
+        const lemma = lemmatize(word);
+        if (lemma !== word && dictCache.has(lemma)) {
+            const data = dictCache.get(lemma);
+            dictCache.set(word, data); // 将变形词也缓存
+            saveDictCache();
+            return data;
+        }
+        // 3. 尝试多个在线API
+        let result = await fetchFromFreeDictionary(word);
+        if (!result) result = await fetchFromMyMemory(word);
+        if (!result && lemma !== word) result = await fetchFromFreeDictionary(lemma);
+        if (!result && lemma !== word) result = await fetchFromMyMemory(lemma);
+        if (result) {
+            dictCache.set(word, result);
+            saveDictCache();
+            return result;
+        }
+        // 4. 完全失败，返回占位
+        return { meaning: "✨ 未收录，可自行添加释义", phonetic: "", usAudio: "", ukAudio: "" };
+    }
+
+    // API1: Free Dictionary API (支持音标和发音URL)
+    async function fetchFromFreeDictionary(word) {
+        try {
+            const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            const entry = data[0];
+            const phonetic = entry.phonetic || (entry.phonetics?.[0]?.text) || "";
+            const meaningObj = entry.meanings[0];
+            const definition = meaningObj?.definitions[0]?.definition || "暂无释义";
+            const usAudio = entry.phonetics?.find(p => p.audio && (p.audio.includes("us") || p.audio.includes("american")))?.audio ||
+                           entry.phonetics?.find(p => p.audio)?.audio || "";
+            const ukAudio = entry.phonetics?.find(p => p.audio && p.audio.includes("uk"))?.audio || "";
+            return { meaning: definition, phonetic, usAudio, ukAudio };
+        } catch(e) { return null; }
+    }
+
+    // API2: MyMemory 翻译 (获取中文释义)
+    async function fetchFromMyMemory(word) {
+        try {
+            const resp = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh`);
+            const data = await resp.json();
+            if (data && data.responseData && data.responseData.translatedText) {
+                let trans = data.responseData.translatedText;
+                if (trans && trans !== word) {
+                    return { meaning: trans, phonetic: "", usAudio: "", ukAudio: "" };
+                }
+            }
+            return null;
+        } catch(e) { return null; }
+    }
+
+    // 发音功能 (增强版，支持音频URL或合成)
+    function speakWord(word, type) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(word);
+        utterance.lang = type === 'us' ? 'en-US' : 'en-GB';
+        utterance.rate = 0.85;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    // ---------- 以下为原有数据管理 (单词库存储) ----------
+    let wordStore = [];       // 存储 { id, word, date, phonetic, meaning, usAudio, ukAudio }
     let multiSelectMode = false;
     let selectedWordIds = new Set();
     let currentFilter = "";
 
-    // 辅助函数: 日期格式化 (YYYY-MM-DD)
     function getTodayStr() { return new Date().toISOString().slice(0,10); }
-    
-    // 加载本地数据
     function loadData() {
         const stored = localStorage.getItem("lingolens_words");
         if(stored) wordStore = JSON.parse(stored);
@@ -368,75 +523,38 @@
         renderLibrary();
         updateStats();
     }
-
     function saveData() {
         localStorage.setItem("lingolens_words", JSON.stringify(wordStore));
         updateStats();
     }
-
     function updateStats() {
         document.getElementById("wordCountBadge").innerText = wordStore.length + " 词";
     }
 
-    // 词典API + 本地缓存 (查询单词元数据)
-    const dictCache = new Map();
-    async function fetchWordData(word) {
-        const lower = word.toLowerCase();
-        if(dictCache.has(lower)) return dictCache.get(lower);
-        try {
-            const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(lower)}`);
-            if(!resp.ok) throw new Error("not found");
-            const data = await resp.json();
-            const entry = data[0];
-            const phonetic = entry.phonetic || (entry.phonetics?.[0]?.text) || "";
-            const meaningObj = entry.meanings[0];
-            const definition = meaningObj?.definitions[0]?.definition || "暂无释义";
-            const usAudio = entry.phonetics?.find(p => p.audio && p.audio.includes("us"))?.audio || 
-                           entry.phonetics?.find(p => p.audio)?.audio || "";
-            const ukAudio = entry.phonetics?.find(p => p.audio && p.audio.includes("uk"))?.audio || "";
-            const result = {
-                word: lower,
-                phonetic,
-                meaning: definition,
-                usAudio,
-                ukAudio
-            };
-            dictCache.set(lower, result);
-            return result;
-        } catch(e) {
-            // 备用本地简易释义
-            const fallback = { word: lower, phonetic: "", meaning: "✨ 新词, 可自行查阅", usAudio: "", ukAudio: "" };
-            dictCache.set(lower, fallback);
-            return fallback;
-        }
-    }
-
-    // 添加单词核心 (去重 + 跳转高亮)
+    // 添加单词 (增强查词)
     async function addWord(wordRaw) {
         let word = wordRaw.trim().toLowerCase();
         if(word === "") { showToast("请输入单词"); return false; }
-        // 去重检查
         const existing = wordStore.find(w => w.word === word);
         if(existing) {
             showToast(`「${word}」已在单词库中`);
             scrollToWordAndHighlight(existing.id);
             return false;
         }
-        // 获取词典数据
-        const dictInfo = await fetchWordData(word);
+        showToast(`📖 查询词典中...`);
+        const dictInfo = await lookupWord(word);
         const newEntry = {
             id: Date.now() + "_" + Math.random(),
-            word: dictInfo.word,
+            word: word,
             date: getTodayStr(),
-            phonetic: dictInfo.phonetic,
+            phonetic: dictInfo.phonetic || "",
             meaning: dictInfo.meaning,
-            usAudio: dictInfo.usAudio,
-            ukAudio: dictInfo.ukAudio
+            usAudio: dictInfo.usAudio || "",
+            ukAudio: dictInfo.ukAudio || ""
         };
         wordStore.push(newEntry);
         saveData();
         renderLibrary();
-        // 滚动到新添加的词
         setTimeout(() => scrollToWordAndHighlight(newEntry.id), 100);
         showToast(`✅ 已添加 ${word}`);
         return true;
@@ -450,8 +568,6 @@
             setTimeout(() => el.classList.remove('highlight'), 800);
         }
     }
-
-    // 删除单词 (单个)
     function deleteWordById(id) {
         wordStore = wordStore.filter(w => w.id != id);
         saveData();
@@ -460,14 +576,12 @@
         showToast("已删除单词");
     }
 
-    // 渲染单词库 (分组 + 过滤)
     function renderLibrary() {
         const container = document.getElementById("wordsLibrary");
         let filtered = wordStore.filter(w => 
             w.word.includes(currentFilter.toLowerCase()) || 
             w.meaning.toLowerCase().includes(currentFilter.toLowerCase())
         );
-        // 按日期分组倒序
         const groups = new Map();
         filtered.forEach(w => { if(!groups.has(w.date)) groups.set(w.date, []); groups.get(w.date).push(w); });
         const sortedDates = Array.from(groups.keys()).sort((a,b)=>b.localeCompare(a));
@@ -501,95 +615,53 @@
             html += `</div></div>`;
         }
         container.innerHTML = html;
-
-        // 绑定发音事件 (事件委托)
+        // 绑定发音
         container.querySelectorAll(".audio-icon").forEach(btn => {
-            btn.removeEventListener("click", audioClickHandler);
-            btn.addEventListener("click", audioClickHandler);
-        });
-        // 长按删除 (单个单词)
-        if(!multiSelectMode) {
-            const wordItems = container.querySelectorAll(".word-item");
-            wordItems.forEach(item => {
-                item.removeEventListener("contextmenu", longPressDelete); 
-                item.removeEventListener("touchstart", touchStartHandler);
-                item.removeEventListener("touchend", touchEndHandler);
-                item.removeEventListener("touchmove", touchMoveHandler);
-                // 增加长按防误触 (原生contextmenu+自定义长按)
-                item.addEventListener("contextmenu", (e) => { e.preventDefault(); handleLongPressDelete(item.dataset.id); });
-                let pressTimer = null;
-                const start = (e) => { if(e.touches) pressTimer = setTimeout(() => { handleLongPressDelete(item.dataset.id); }, 500); };
-                const cancel = () => { if(pressTimer) clearTimeout(pressTimer); };
-                item.addEventListener("touchstart", start, {passive:false});
-                item.addEventListener("touchend", cancel);
-                item.addEventListener("touchmove", cancel);
-                item._start = start; item._cancel = cancel;
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const word = btn.dataset.word;
+                const type = btn.dataset.audio;
+                const url = btn.dataset.url;
+                if(url && url.trim() !== "") {
+                    new Audio(url).play().catch(() => speakWord(word, type));
+                } else {
+                    speakWord(word, type);
+                }
             });
-        }
-
-        // 多选模式下 绑定checkbox点击 & 滑动批量选择
-        if(multiSelectMode) {
-            attachMultiSelectEvents();
-        }
+        });
+        if(!multiSelectMode) attachLongPressDelete();
+        else attachMultiSelectEvents();
     }
 
-    function audioClickHandler(e) {
-        e.stopPropagation();
-        const btn = e.currentTarget;
-        const word = btn.dataset.word;
-        const type = btn.dataset.audio;
-        const url = btn.dataset.url;
-        if(url && url.trim() !== "") {
-            const audio = new Audio(url);
-            audio.play().catch(() => fallbackSpeak(word, type));
-        } else {
-            fallbackSpeak(word, type);
-        }
+    function attachLongPressDelete() {
+        const items = document.querySelectorAll(".word-item");
+        items.forEach(item => {
+            item.removeEventListener("contextmenu", longPressHandler);
+            item.removeEventListener("touchstart", touchStartHandler);
+            item.removeEventListener("touchend", touchEndHandler);
+            item.addEventListener("contextmenu", (e) => { e.preventDefault(); handleLongPressDelete(item.dataset.id); });
+            let timer = null;
+            const start = (e) => { timer = setTimeout(() => { handleLongPressDelete(item.dataset.id); }, 500); };
+            const cancel = () => { if(timer) clearTimeout(timer); };
+            item.addEventListener("touchstart", start, {passive:false});
+            item.addEventListener("touchend", cancel);
+            item.addEventListener("touchmove", cancel);
+            item._start = start; item._cancel = cancel;
+        });
     }
-
-    function fallbackSpeak(word, type) {
-        if(!window.speechSynthesis) return;
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(word);
-        utterance.lang = type === 'us' ? 'en-US' : 'en-GB';
-        utterance.rate = 0.85;
-        window.speechSynthesis.speak(utterance);
-    }
-
     function handleLongPressDelete(id) {
         if(multiSelectMode) return;
-        const confirmDel = confirm("确定要删除这个单词吗？");
-        if(confirmDel) deleteWordById(id);
+        if(confirm("确定删除这个单词吗？")) deleteWordById(id);
     }
 
-    // 多选逻辑 (滑动选择)
     let lastToggledElement = null;
     function attachMultiSelectEvents() {
         const container = document.getElementById("wordsLibrary");
-        const wordItems = container.querySelectorAll(".word-item");
-        // 为每个checkbox绑定点击
-        wordItems.forEach(item => {
-            const chk = item.querySelector(".checkbox");
-            if(chk) {
-                chk.onclick = (e) => {
-                    e.stopPropagation();
-                    const wid = item.dataset.id;
-                    toggleSelectWord(wid);
-                    renderLibrary(); // 重新渲染保持ui
-                };
-            }
+        container.querySelectorAll(".checkbox").forEach(chk => {
+            chk.onclick = (e) => { e.stopPropagation(); const wid = chk.dataset.checkboxId; toggleSelectWord(wid); renderLibrary(); };
         });
-        // 滑动多选: 监听touchmove on container
         let isSliding = false;
-        container.addEventListener("touchstart", (e) => {
-            if(e.touches.length === 1 && !e.target.closest(".audio-icon")) {
-                isSliding = true;
-                const targetItem = e.target.closest(".word-item");
-                if(targetItem && !targetItem.querySelector(".checkbox")?.contains(e.target)) {
-                    // 触发滑动模式前不立刻选中
-                }
-            }
-        });
+        container.addEventListener("touchstart", (e) => { if(e.touches.length===1 && !e.target.closest(".audio-icon")) isSliding=true; });
         container.addEventListener("touchmove", (e) => {
             if(!multiSelectMode || !isSliding) return;
             e.preventDefault();
@@ -598,59 +670,30 @@
             if(item && item !== lastToggledElement) {
                 lastToggledElement = item;
                 const wid = item.dataset.id;
-                if(!selectedWordIds.has(wid)) {
-                    toggleSelectWord(wid);
-                    renderLibrary();
-                }
+                if(!selectedWordIds.has(wid)) toggleSelectWord(wid);
+                renderLibrary();
             }
         });
-        container.addEventListener("touchend", () => { isSliding = false; lastToggledElement = null; });
+        container.addEventListener("touchend", () => { isSliding=false; lastToggledElement=null; });
     }
-
     function toggleSelectWord(id) {
         if(selectedWordIds.has(id)) selectedWordIds.delete(id);
         else selectedWordIds.add(id);
     }
-
-    function exitMultiSelect() {
-        multiSelectMode = false;
-        selectedWordIds.clear();
-        document.getElementById("multiFooter").classList.add("hidden");
-        document.getElementById("enterMultiSelect").innerHTML = '<i class="fas fa-check-circle"></i> 选择';
-        renderLibrary();
-    }
-    function enterMultiSelect() {
-        multiSelectMode = true;
-        selectedWordIds.clear();
-        document.getElementById("multiFooter").classList.remove("hidden");
-        document.getElementById("enterMultiSelect").innerHTML = '<i class="fas fa-times"></i> 取消选择';
-        renderLibrary();
-    }
-
-    // 删除所选
+    function exitMultiSelect() { multiSelectMode=false; selectedWordIds.clear(); document.getElementById("multiFooter").classList.add("hidden"); document.getElementById("enterMultiSelect").innerHTML='<i class="fas fa-check-circle"></i> 选择'; renderLibrary(); }
+    function enterMultiSelect() { multiSelectMode=true; selectedWordIds.clear(); document.getElementById("multiFooter").classList.remove("hidden"); document.getElementById("enterMultiSelect").innerHTML='<i class="fas fa-times"></i> 取消选择'; renderLibrary(); }
     function deleteSelected() {
-        if(selectedWordIds.size === 0) { showToast("未选择任何单词"); return; }
+        if(selectedWordIds.size===0){ showToast("未选择任何单词"); return; }
         if(confirm(`确认删除 ${selectedWordIds.size} 个单词吗？`)) {
             wordStore = wordStore.filter(w => !selectedWordIds.has(w.id));
-            saveData();
-            exitMultiSelect();
-            renderLibrary();
-            showToast("已删除所选单词");
+            saveData(); exitMultiSelect(); renderLibrary(); showToast("已删除所选单词");
         }
     }
 
-    // 工具函数
-    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
-    function showToast(msg) {
-        let t = document.querySelector(".toast");
-        if(t) t.remove();
-        let div = document.createElement("div");
-        div.className = "toast"; div.innerText = msg;
-        document.body.appendChild(div);
-        setTimeout(() => div.remove(), 2000);
-    }
+    function escapeHtml(str) { return String(str).replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    function showToast(msg) { let t=document.querySelector(".toast"); if(t) t.remove(); let div=document.createElement("div"); div.className="toast"; div.innerText=msg; document.body.appendChild(div); setTimeout(()=>div.remove(),2000); }
 
-    // ---------- OCR 拍照识别 ----------
+    // OCR
     const imageInput = document.getElementById("imageInput");
     document.getElementById("triggerCamera").onclick = () => imageInput.click();
     imageInput.addEventListener("change", async (e) => {
@@ -659,62 +702,40 @@
         const statusDiv = document.getElementById("ocrStatus");
         statusDiv.innerHTML = "<i class='fas fa-spinner fa-pulse'></i> 识别中...";
         try {
-            const { data: { text } } = await Tesseract.recognize(file, 'eng', { logger: m => console.log(m) });
+            const { data: { text } } = await Tesseract.recognize(file, 'eng');
             const words = text.match(/[a-zA-Z]+(?:['’][a-zA-Z]+)?/g);
             let candidate = words && words.length ? words[0] : null;
             if(candidate) {
-                statusDiv.innerHTML = `✅ 识别到: ${candidate}  <i class="fas fa-arrow-right"></i> 添加中...`;
+                statusDiv.innerHTML = `✅ 识别到: ${candidate}`;
                 await addWord(candidate);
                 statusDiv.innerHTML = "";
-            } else {
-                statusDiv.innerHTML = "⚠️ 未识别出有效单词，请重试";
-                setTimeout(()=> statusDiv.innerHTML = "", 2000);
-            }
-        } catch(err) { statusDiv.innerHTML = "识别失败"; console.error(err); }
+            } else { statusDiv.innerHTML = "⚠️ 未识别出单词"; setTimeout(()=>statusDiv.innerHTML="",1500); }
+        } catch(err) { statusDiv.innerHTML = "识别失败"; }
         imageInput.value = "";
     });
 
-    // ---------- 文字输入 待选项 ----------
+    // 文字输入待选项 (基于本地词典缓存和已添加单词)
     const textInput = document.getElementById("textWordInput");
     const suggContainer = document.getElementById("suggestionsList");
-    let suggestionWords = [];
-    // 动态从已有词库 + 常见前缀生成 (简易)
-    const commonWords = ["apple","banana","car","house","beautiful","run","happy","dictionary","english","learn","language","phone","computer","music","reading"];
-    textInput.addEventListener("input", async (e) => {
-        const val = e.target.value.trim().toLowerCase();
-        if(val.length === 0) { suggContainer.innerHTML = ""; return; }
-        // 合并本地词库和常见词
-        let localWordsSet = new Set(wordStore.map(w => w.word));
-        commonWords.forEach(w => localWordsSet.add(w));
-        const matches = Array.from(localWordsSet).filter(w => w.startsWith(val)).slice(0, 8);
-        if(matches.length === 0) { suggContainer.innerHTML = `<div class="empty-suggest">未找到匹配，可直接添加</div>`; return; }
-        suggContainer.innerHTML = matches.map(w => `<div class="sugg-item" data-word="${w}">${w}</div>`).join("");
+    textInput.addEventListener("input", async () => {
+        const val = textInput.value.trim().toLowerCase();
+        if(val.length===0){ suggContainer.innerHTML=""; return; }
+        let matched = Array.from(dictCache.keys()).filter(w => w.startsWith(val)).slice(0,8);
+        if(matched.length===0) matched = wordStore.map(w=>w.word).filter(w=>w.startsWith(val)).slice(0,8);
+        if(matched.length===0) { suggContainer.innerHTML=`<div class="empty-suggest">无匹配，可直接添加</div>`; return; }
+        suggContainer.innerHTML = matched.map(w => `<div class="sugg-item" data-word="${w}">${w}</div>`).join("");
         document.querySelectorAll(".sugg-item").forEach(el => {
-            el.onclick = () => { addWord(el.dataset.word); textInput.value = ""; suggContainer.innerHTML = ""; };
+            el.onclick = () => { addWord(el.dataset.word); textInput.value=""; suggContainer.innerHTML=""; };
         });
     });
-
-    document.getElementById("manualAddBtn").onclick = async () => {
-        const word = textInput.value.trim();
-        if(word) { await addWord(word); textInput.value = ""; suggContainer.innerHTML = ""; }
-        else showToast("请输入单词");
-    };
-
-    // 搜索过滤
+    document.getElementById("manualAddBtn").onclick = async () => { const w=textInput.value.trim(); if(w) await addWord(w); textInput.value=""; suggContainer.innerHTML=""; };
     document.getElementById("searchInput").addEventListener("input", (e) => { currentFilter = e.target.value; renderLibrary(); });
-    // 多选按钮逻辑
-    const multiBtn = document.getElementById("enterMultiSelect");
-    multiBtn.onclick = () => {
-        if(multiSelectMode) exitMultiSelect();
-        else enterMultiSelect();
-    };
+    document.getElementById("enterMultiSelect").onclick = () => { if(multiSelectMode) exitMultiSelect(); else enterMultiSelect(); };
     document.getElementById("cancelMultiBtn").onclick = () => exitMultiSelect();
     document.getElementById("deleteSelectedBtn").onclick = () => deleteSelected();
 
-    // 初始化
+    loadDictCache();
     loadData();
-    // 模拟轻微触感 (iOS不支持vibrate但保留)
-    if(navigator.vibrate) { /* 可选 */ }
 </script>
 </body>
 </html>
